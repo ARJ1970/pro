@@ -1,0 +1,250 @@
+
+    一、 选题意义
+
+Donut项目作为一种先进的在内存中执行多种文件类型（如VBScript, JScript, EXE, DLL文件和.NET assemblies）的工具，在二进制程序分析和网络安全领域具有重要的研究意义。其核心价值体现在以下几个方面：
+
+1. **攻击模拟与红队行动：** Donut允许安全研究人员和红队操作员模拟真实的攻击场景，通过将各种可执行文件转换为shellcode并在内存中无文件执行，以规避传统基于磁盘的检测机制。这对于评估现有安全防御措施的有效性和发现潜在的攻击面至关重要。
+2. **防御分析与缓解措施：** 通过深入理解Donut的工作原理和其绕过AMSI、WLDP、ETW等安全机制的技术，防御人员可以更好地构建针对性的检测分析方法和缓解措施。这有助于提升企业和组织对高级持续性威胁（APT）的抵御能力。
+3. **无文件攻击技术研究：** Donut代表了当前无文件攻击（fileless attack）的先进技术之一。对其进行分析和研究，有助于推动对无文件攻击原理、传播机制和检测对抗技术的发展，从而提高整个行业的网络安全防护水平。
+4. **代码混淆与逆向工程：** Donut生成的shellcode具有可选的加密和混淆功能，可以用于研究代码混淆技术及其对逆向分析的挑战。通过分析其内部实现，可以加深对二进制程序逆向分析的理解，并探索更有效的分析方法。
+
+
+    二、 实验目标
+    本实验旨在深入理解和分析Donut项目，一个功能强大的shellcode生成器，其目标是在内存中执行多种类型的二进制程序和脚本。具体实验目标包括：
+
+    1. **理解无文件执行机制：** 分析Donut如何实现VBScript、JScript、EXE、DLL文件和.NET assemblies的无文件在内存中执行，包括其加载器原理、内存分配和执行流程。
+    2. **研究安全绕过技术：** 详细分析Donut如何绕过Antimalware Scan Interface (AMSI)、Windows Lockdown Policy (WLDP)以及Event Tracing for Windows (ETW)等安全检测机制，并评估这些绕过技术的效果。
+    3. **分析代码混淆与加密：** 研究Donut对输入文件进行压缩、加密（如Chaskey block cipher）以及生成随机字符串和API哈希的机制，以了解其对抗逆向分析和检测的方法。
+    4. **二进制程序属性分析：** 结合Donut的特性，探讨如何分析在内存中执行的二进制程序的属性，包括其入口点、依赖库、导入导出函数等。
+    5. **检测恶意行为与安全漏洞：** 基于对Donut的理解，探索和设计针对此类内存执行技术的检测方法，识别潜在的恶意行为模式，并为发现和修复相关安全漏洞提供依据。
+    6. **编译与功能验证：** 学习Donut的编译过程，并在不同环境下（Windows/Linux）成功编译生成器和加载器，通过实际操作验证其各项核心功能。
+
+
+    三、 实验环境
+    根据Donut项目的特性和编译要求，本实验所涉及的实验环境和辅助工具如下：
+
+        三.1  辅助工具
+        *   **Git:** 用于克隆Donut源代码仓库。
+        *   **Pip3:** Python包管理工具，用于安装和管理Donut的Python模块。
+        *   **Docker:** 用于构建和运行Donut的Docker容器，提供隔离的编译和运行环境。
+        *   **支持性工具：** Donut项目本身包含一些辅助性可执行文件，如 `hash.exe` (用于哈希计算), `encrypt.exe` (用于加密), `inject.exe` (用于进程注入测试), `inject_local.exe` (用于本地进程注入测试)，这些工具在shellcode生成和测试过程中会用到。
+
+        三.2  编译环境
+        *   **Windows平台：**
+            *   **Microsoft Visual Studio 2019 (或更高版本):** 用于使用 `nmake -f Makefile.msvc` 编译Donut的生成器（donut.exe）、动态库（donut.dll）和静态库（donut.lib）。
+            *   **MinGW-64:** 可以在Windows上使用，通过 `make -f Makefile.mingw` 命令进行编译。
+        *   **Linux平台：**
+            *   **GCC/Clang (通过Make):** 在Linux系统上，可以直接使用 `make` 命令进行编译，生成动态库（donut.so）、静态库（donut.a）和生成器（donut）。
+            *   **MinGW-64:** 也可以在Linux上交叉编译Windows版本，通过 `make -f Makefile.mingw` 命令进行编译。
+
+    四、 源码项目
+    Donut项目是一个开源的shellcode生成器，专注于实现多种文件类型（包括VBScript、JScript、EXE、DLL文件和.NET assemblies）的无文件在内存中执行。以下是该项目的详细介绍：
+
+        四.1  基本介绍
+**仓库网址：** [http://github.com/thewover/donut.git](http://github.com/thewover/donut.git)
+
+Donut作为一个位置无关代码（position-independent code），能够将各种可执行文件和脚本转换为shellcode，并在目标进程内存中直接加载和执行，而无需将其写入磁盘。生成的模块可以从HTTP服务器进行分阶段加载，也可以直接嵌入到加载器中。为了增强隐蔽性，模块可选择使用Chaskey块密码和随机生成的128位密钥进行加密。文件在内存中加载执行后，原始引用会被擦除，以对抗内存扫描。
+
+        四.2  核心功能
+Donut生成器和加载器支持以下核心功能：
+*   **多种文件类型支持：** 支持VBScript、JScript、EXE、DLL文件和.NET assemblies的在内存执行。
+*   **文件压缩：** 通过aPLib、LZNT1、Xpress和Xpress Huffman算法对输入文件进行压缩，减小shellcode体积。
+*   **熵增强：** 利用熵来生成API哈希和字符串，增加分析难度。
+*   **对称加密：** 使用128位对称加密（Chaskey块密码）保护模块内容。
+*   **PE头处理：** 支持覆盖原生PE头或将其存储在MEM_IMAGE内存中，以避免内存取证时的检测。
+*   **安全机制绕过：** 能够修补Antimalware Scan Interface (AMSI)、Windows Lockdown Policy (WLDP) 和 Event Tracing for Windows (ETW)，以绕过常见的安全检测。
+*   **进程行为控制：** 支持修补EXE文件的命令行参数，以及修补与退出相关的API，以避免终止宿主进程。
+*   **多种输出格式：** 生成的shellcode支持C、Ruby、Python、PowerShell、Base64、C#、Hexadecimal和UUID字符串等多种输出格式，便于集成到不同的攻击框架或工具中。
+
+        四.3  适用场景
+Donut项目主要适用于以下场景：
+*   **红队行动与攻击模拟：** 攻击性安全团队可以使用Donut来模拟高级威胁攻击者，实现无文件或内存驻留的攻击，评估组织的安全防御能力和响应机制。
+*   **安全研究与防御开发：** 安全研究人员可以利用Donut来深入理解无文件攻击技术、内存加载技术以及对抗安全产品的机制，从而开发更有效的检测工具和防御策略。
+*   **漏洞利用开发：** 在漏洞利用过程中，可以使用Donut将复杂的载荷（如完整的EXE或DLL）转换为shellcode，简化攻击流程并提高隐蔽性。
+*   **安全教学与培训：** 作为教学工具，可以帮助学生和从业者理解现代恶意软件的运行机制和对抗技术。
+
+
+    五、 实验内容
+以下各项任务需给出截图，并说明相关的含义，解释运行结果。
+
+        五.1  代码结构分析
+Donut项目的代码结构清晰，主要包含以下几个核心目录和文件，共同协作完成shellcode的生成和加载功能：
+*   **`donut.c`:** 这是Donut项目的核心C源文件，实现了shellcode生成器的主要逻辑。它负责解析命令行参数，读取输入文件，根据文件类型构建相应的模块，创建加载器实例，最终生成和保存shellcode。其中的`DonutCreate`函数是整个生成过程的入口点。 （`donut.c` 1577-1618行）
+*   **`donut.h`:** 这是Donut项目的核心头文件，定义了项目中共用的数据结构、常量和函数原型。它包含了`DONUT_CONFIG`（`donut.h` 137-185行）用于存储配置信息，各种宏定义（`donut.h` 51-128行）用于指示错误码、架构、模块类型、输出格式、压缩引擎、熵级别等，以及`DonutCreate`（`donut.h` 197行）、`DonutDelete`和`DonutError`等核心函数的声明。
+*   **`loader/`:** 该目录包含了针对不同文件类型（如.NET、PE、脚本）的内存加载器实现，以及各种绕过安全机制（AMSI、WLDP、ETW）的代码。例如：
+    *   `loader/inmem_dotnet.c`: 处理.NET assemblies的内存加载逻辑。
+    *   `loader/inmem_pe.c`: 处理原生EXE/DLL的内存加载逻辑。
+    *   `loader/inmem_script.c`: 处理VBScript和JScript的内存加载逻辑。
+    *   `loader/bypass.c`: 包含了AMSI、WLDP和ETW的绕过实现。
+*   **`include/`:** 存放了项目所需的各种头文件，定义了数据结构和函数原型，如`donut.h`（核心头文件）、`encrypt.h`、`pe.h`等。
+*   **`lib/`:** 包含了预编译的库文件，例如`aplib32.a`、`aplib64.a`等，用于文件压缩。
+*   **`encrypt.c` / `hash.c` / `format.c`:** 这些文件实现了shellcode生成过程中的辅助功能，如内容的加密（`encrypt.c`）、哈希计算（`hash.c`）和输出格式化（`format.c`）。
+*   **`docs/`:** 存放了项目的相关文档，如开发笔记（`devnotes.md`）和Python扩展说明（`2019-08-21-Python_Extension.md`）。
+*   **`examples/`:** 提供了动态和静态库的使用示例，帮助开发者理解如何集成Donut。
+*   **`DonutTest/`:** 包含了用于测试Donut的子项目，如`.NET`的 `rundotnet.cpp` 和 `C#` 的 `DonutTest.csproj`。
+*   **`ModuleMonitor/`:** 一个概念验证工具，用于检测CLR注入行为。
+*   **`ProcessManager/`:** 进程发现工具，用于了解正在运行的进程及其属性。
+*   **`Makefile*`:** 各种编译脚本，支持MSVC和MinGW等不同编译环境。
+
+    （1） Donut生成器的工作流程：
+    Donut生成器（`donut.c`）负责将输入的VBS、JS、EXE、DLL或.NET Assembly文件转换为位置无关的shellcode。其核心流程在`DonutCreate`函数中实现（`donut.c` 1577行），主要包括以下步骤：
+    1. **参数解析：** 通过`get_opt`函数（`donut.c` 1791行）解析用户提供的命令行参数（如目标架构、加密级别、输出格式等）。（`donut.c` 2211-2231行）
+    2. **文件读取与类型识别：** `read_file_info`函数（`donut.c` 464行）负责读取输入的原始文件，并根据文件扩展名和PE结构识别其类型（PE、.NET Assembly、Script）。（`donut.c` 492-588行）
+    3. **模块转换：** `build_module`函数（`donut.c` 675行）根据文件类型，调用相应的模块转换逻辑，将其内容转化为适用于内存执行的格式。如果启用了压缩，会先调用`compress_file`函数（`donut.c` 349行）进行处理。（`donut.c` 675-807行）
+    4. **数据压缩与加密：** 可选地对转换后的模块数据进行压缩（`compress_file`函数，`donut.c` 349行，支持aPLib, LZNT1等）和加密（通过`donut_encrypt`函数，`donut.c` 1043行，使用Chaskey）。
+    5. **加载器实例构建：** `build_instance`函数（`donut.c` 819行）负责创建`DONUT_INSTANCE`结构体，该结构体包含了加载器所需的配置、API哈希、GUIDs等信息。如果启用熵，还会生成随机密钥和签名。（`donut.c` 819-1078行）
+    6. **加载器Shellcode构建：** `build_loader`函数（`donut.c` 1217行）根据目标架构，将加载器代码（如`LOADER_EXE_X86`、`LOADER_EXE_X64`）和构建好的`DONUT_INSTANCE`组合，生成最终的position-independent shellcode。（`donut.c` 1217-1338行）
+    7. **输出格式化与保存：** `save_loader`函数（`donut.c` 1109行）根据用户指定的格式（Binary, Base64, C等），将生成的shellcode保存到输出文件。（`donut.c` 1109-1215行）
+
+    实现步骤（截图参考）：
+    1. **命令行参数查看：** 运行 `donut.exe -h` (Windows) 或 `./donut -h` (Linux) 显示帮助信息。
+    *   **预期截图：** Donut命令行帮助信息，展示所有支持的参数和功能。
+    2. **生成简单的C# Shellcode：** 假设我们有一个名为 `Hello.exe` 的C#程序。执行命令：`donut -f 7 Hello.exe -o hello.cs`。
+    *   **预期截图：** 命令执行成功提示，以及 `hello.cs` 文件内容片段，展示生成的C# shellcode。
+    3. **生成Python Shellcode：** 使用Python模块生成shellcode。首先安装：`pip3 install donut-shellcode`，然后编写Python脚本调用Donut生成。
+    *   **预期截图：** Python安装成功的界面，以及Python脚本和其输出的shellcode片段。
+
+    （2） Donut加载器的工作流程：
+    Donut加载器是生成的shellcode的核心部分，负责在内存中准备环境并执行载荷。其主要步骤包括：
+    1. **内存分配：** 在目标进程中分配一块可读可写可执行的内存区域。
+    2. **数据解密与解压缩：** 如果shellcode被加密和压缩，加载器会负责对其进行解密和解压缩。
+    3. **API解析：** 动态解析所需的Windows API函数地址，以避免硬编码导入表。（`donut.c` 905-920行）
+    4. **安全绕过：** 根据配置，执行AMSI、WLDP、ETW的修补，禁用或绕过安全检测。（`donut.c` 963-985行）
+    5. **载荷加载与执行：** 根据模块类型，调用相应的加载逻辑：
+        *   **.NET Assemblies：** 使用Unmanaged CLR Hosting API加载CLR，创建新的Application Domain，并通过 `AppDomain.Load_3` 方法加载并执行.NET Assembly的入口点或指定方法。（`donut.c` 926-936行）
+        *   **VBScript/JScript：** 利用IActiveScript接口执行脚本内容。（`donut.c` 939-960行）
+        *   **原生EXE/DLL：** 实现自定义PE加载器，处理导入表、重定位、TLS回调等，然后在内存中执行PE的入口点或指定函数。
+    6. **善后处理：** 可选地擦除内存中与原始载荷相关的引用，或根据配置决定是否退出当前线程或进程。（`donut.c` 855-862行，以及`donut.c` 1629-1658行 `DonutDelete`函数）
+
+    实现步骤（截图参考）：
+    1. **进程注入测试：** 使用 `inject_local.exe` 将生成的二进制shellcode注入到自身进程。
+    *   **预期截图：** `inject_local.exe` 成功注入并执行shellcode的命令行输出。
+    2. **CLR注入检测：** 运行 `ModuleMonitor` 工具，然后尝试注入一个.NET Assembly，观察`ModuleMonitor`是否能检测到CLR注入。
+    *   **预期截图：** `ModuleMonitor` 成功检测到CLR注入的界面。
+
+        五.2  核心API和数据结构分析
+本节将深入分析Donut项目中使用的关键API和数据结构，这些是理解其内部工作原理的基础。
+    （1） **`DONUT_CONFIG` 结构体：** （`donut.h` 137-185行）
+    `DONUT_CONFIG` 结构体是Donut生成器的核心配置容器，包含了用户通过命令行参数或API调用传入的所有设置。其重要字段包括：
+    *   `input` / `output`：输入文件路径和输出shellcode文件路径。
+    *   `arch`：目标架构（x86, x64, x86+x64）。
+    *   `format`：输出shellcode的格式（二进制、Base64、C、Python等）。
+    *   `compress`：文件压缩算法（无、aPLib、LZNT1、Xpress）。
+    *   `entropy`：熵级别，决定是否启用随机命名和对称加密。
+    *   `bypass`：AMSI/WLDP/ETW绕过策略。
+    *   `.NET`相关：`runtime`、`domain`、`cls`、`method`等，用于指定.NET Assembly的执行参数。
+    *   `server` / `modname`：HTTP加载模式下的服务器URL和模块名称。
+    *   `mod` / `inst` / `pic`：分别指向生成的模块数据、加载器实例数据和最终的shellcode，以及它们的长度。
+
+    （2） **`DONUT_MODULE` 结构体：** （在`donut.h`中定义，但实际在`donut.c`中构建和使用）
+    `DONUT_MODULE` 结构体包含了关于被加载模块（原始输入文件）的元数据和其自身的数据。它被附加在`DONUT_INSTANCE`之后，或者作为独立文件通过HTTP传输。其关键字段包括：
+    *   `type`：模块类型（.NET DLL/EXE, Unmanaged DLL/EXE, VBS, JS）。
+    *   `compress`：指示是否使用了压缩以及使用的压缩算法。
+    *   `zlen` / `len`：压缩和原始模块的长度。
+    *   `domain` / `cls` / `method` / `runtime`：针对.NET模块的特定信息。
+    *   `args`：传递给模块的命令行参数。
+    *   `data`：实际的模块数据（可能是压缩或加密后的）。
+
+    （3） **`DONUT_INSTANCE` 结构体：** （在`donut.h`中定义，但实际在`donut.c`中构建和使用）
+    `DONUT_INSTANCE` 结构体是Donut加载器的配置数据，它被嵌入到最终的shellcode中，或者作为独立部分与远程加载的模块配合使用。它包含了加载器执行所需的所有运行时信息。其关键字段包括：
+    *   `type`：实例类型（嵌入式或HTTP加载）。
+    *   `exit_opt`：加载器完成执行后的退出行为（退出线程、退出进程或阻塞）。
+    *   `entropy`：用于运行时解密和去混淆的熵级别。
+    *   `key` / `mod_key`：用于实例和模块的对称加密密钥。（`donut.c` 870-886行）
+    *   `sig`：用于验证解密是否成功的签名字符串。（`donut.c` 889-894行）
+    *   `iv`：用于Maru哈希算法的初始化向量。（`donut.c` 896-901行）
+    *   `api.hash[]`：存储了加载器所需关键API函数的哈希值，用于运行时动态解析API地址。（`donut.c` 905-920行）
+    *   `dll_names`：存储了加载器所需DLL的名称字符串（如`ole32;oleaut32;wininet;mscoree;shell32`）。
+    *   `xIID_*` / `xCLSID_*`：用于.NET和脚本加载的COM接口和类ID的GUID结构体。（`donut.c` 125-172行）
+    *   `clr` / `amsi` / `wldp` / `etw` 相关字符串：用于绕过安全检测机制的DLL和函数名称。（`donut.c` 967-985行）
+    *   `server` / `http_req`：HTTP加载模式下的服务器URL和HTTP请求方法。
+    *   `module.x`：如果实例类型为嵌入式，则直接包含`DONUT_MODULE`的数据。
+
+    （4） **API导入和哈希计算：** 
+    Donut加载器在运行时动态解析所需的Windows API，而不是通过传统的导入表。`api_imports`数组（`donut.c` 46-122行）定义了加载器所需的所有DLL及其导出的API函数。在`build_instance`函数中（`donut.c` 905-917行），会为这些API计算Maru哈希值，并存储在`DONUT_INSTANCE`结构体的`api.hash[]`字段中。
+
+        五.3  xx功能代码分析
+
+
+    六、 编译及复现过程
+    本节将详细介绍Donut项目的编译过程，以及如何搭建实验环境和复现其功能。
+
+        六.1  编译过程
+Donut项目支持在Windows和Linux平台下使用不同的编译器进行编译。以下是具体的编译步骤：
+
+    1.  **克隆代码仓库：**
+        在Windows命令行或Linux终端中，使用Git克隆Donut的GitHub仓库：
+        ```bash
+        git clone http://github.com/thewover/donut.git
+        cd donut
+        ```
+        *   **预期截图：** Git克隆命令执行成功的截图，以及进入`donut`目录后的文件列表。
+
+    2.  **Windows平台编译：**
+        *   **使用Microsoft Visual Studio：**
+            启动x64的Microsoft Visual Studio Developer Command Prompt，切换到Donut仓库目录，然后执行Make命令：
+            ```bash
+            nmake -f Makefile.msvc
+            ```
+            这将生成`donut.exe`（生成器）、`donut.dll`（动态库）和`donut.lib`（静态库）。
+            *   **预期截图：** `nmake -f Makefile.msvc`命令执行成功的输出，以及`donut.exe`等生成文件在目录中的截图。
+        *   **使用MinGW-64：**
+            在Windows或Linux系统上，如果安装了MinGW-64，可以切换到Donut仓库目录，然后执行Make命令：
+            ```bash
+            make -f Makefile.mingw
+            ```
+            *   **预期截图：** `make -f Makefile.mingw`命令执行成功的输出。
+
+    3.  **Linux平台编译：**
+        切换到Donut仓库目录，直接执行Make命令：
+        ```bash
+        make
+        ```
+        这将生成`donut`（生成器）、`donut.so`（动态库）和`donut.a`（静态库）。
+        *   **预期截图：** `make`命令执行成功的输出，以及`donut`等生成文件在目录中的截图。
+
+    4.  **Python模块安装：**
+        从源码安装：
+        ```bash
+        pip3 uninstall donut-shellcode # 确保卸载旧版本
+        pip3 install .
+        ```
+        从PyPi安装：
+        ```bash
+        pip3 install donut-shellcode
+        ```
+        *   **预期截图：** `pip3 install .` 或 `pip3 install donut-shellcode` 命令执行成功的输出。
+
+    5.  **Docker容器构建与运行：**
+        构建Docker镜像：
+        ```bash
+        docker build -t donut .
+        ```
+        运行Donut：
+        ```bash
+        docker run -it --rm -v "${PWD}:/workdir" donut -h
+        ```
+        *   **预期截图：** `docker build` 和 `docker run` 命令执行成功的输出，以及`donut -h`的帮助信息。
+
+        六.2  实验环境
+    搭建适用的实验环境，如x个虚拟机等，进行说明
+    为了更好地进行Donut项目的实验和复现，建议搭建以下实验环境：
+    *   **Windows虚拟机：** 建议使用Windows 10或Windows Server 2019虚拟机，用于安装Visual Studio 2019、MinGW-64，并测试Donut生成的Windows平台shellcode和注入工具。
+    *   **Linux虚拟机：** 建议使用Ubuntu 20.04或Kali Linux虚拟机，用于编译Donut的Linux版本，安装Python环境，并进行相关测试。
+    *   **网络环境：** 确保虚拟机可以访问互联网以下载依赖项，并在必要时配置内部网络用于模拟攻击场景。
+    *   **辅助工具：** 确保在相应的操作系统中安装了Git、Python3、pip3以及Docker。
+
+        六.3  复现效果
+    复现效果将根据“五、实验内容”中描述的实验步骤进行验证，包括：
+    1.  **Donut生成器功能验证：** 验证Donut能否成功将各种类型的输入文件转换为不同格式的shellcode。
+    2.  **内存执行验证：** 通过`inject.exe`或`inject_local.exe`工具，验证生成的shellcode能否在内存中成功执行，并观察其行为。
+    3.  **安全绕过验证：** 验证Donut在绕过AMSI、WLDP、ETW等安全机制方面的效果，可以使用`ModuleMonitor`等工具进行检测。
+    4.  **多平台兼容性验证：** 在Windows和Linux平台上分别验证Donut的编译和运行效果。
+
+
+    七、 问题与求解方法记录
+
+
+    八、 体会与总结
+
+
